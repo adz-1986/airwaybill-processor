@@ -5,12 +5,11 @@ import io
 st.set_page_config(page_title="Air Waybill Processor", layout="centered")
 
 st.title("🛩️ Air Waybill PDF Processor")
-st.markdown("Upload your Air Waybill PDF. The app will automatically keep only the **first 2 pages** and update the charge fields to **'As Agreed'**.")
+st.markdown("Upload your Air Waybill PDF to keep the **first 2 pages** and set pricing to **'As Agreed'**.")
 
 uploaded_file = st.file_uploader("Choose an Air Waybill PDF", type=["pdf"])
 
 if uploaded_file is not None:
-    # Read PDF into memory
     doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
     
     # 1. Keep only the first 2 pages if longer than 2 pages
@@ -19,24 +18,32 @@ if uploaded_file is not None:
         
     page = doc[0]  # Page 1
     
-    # 2. Target fields to replace with "As Agreed"
-    targets = ["12.50", "437.50"]
+    # 2. Define exact bounding boxes [x0, y0, x1, y1] for each field on standard A4 Air Waybill
+    # Adjust these exact box bounds if your scanner / renderer uses a slightly different DPI layout
+    fields = [
+        {"name": "Rate / Charge",   "rect": fitz.Rect(275, 235, 335, 265)},
+        {"name": "Total Charge",    "rect": fitz.Rect(375, 235, 475, 265)},
+        {"name": "Rate Total Row",  "rect": fitz.Rect(375, 455, 475, 480)},
+        {"name": "Weight Charge",   "rect": fitz.Rect(110, 488, 200, 515)},
+        {"name": "Total Prepaid",   "rect": fitz.Rect(110, 785, 200, 810)}
+    ]
     
-    for target in targets:
-        text_instances = page.search_for(target)
-        for rect in text_instances:
-            # Cover existing text with a white box
-            page.add_redact_annot(rect, fill=(1, 1, 1))
-            page.apply_redactions()
-            
-            # Overlay "As Agreed"
-            page.insert_text(
-                rect.tl + (0, 8),
-                "As Agreed",
-                fontsize=8,
-                fontname="helv",
-                color=(0, 0, 0)
-            )
+    for field in fields:
+        r = field["rect"]
+        
+        # Redact/blank out existing numbers in the box area
+        page.add_redact_annot(r, fill=(1, 1, 1))
+        page.apply_redactions()
+        
+        # Insert "As Agreed" horizontally and vertically centered inside the box
+        page.insert_textbox(
+            r,
+            "As Agreed",
+            fontsize=8,
+            fontname="helv",
+            color=(0, 0, 0),
+            align=fitz.TEXT_ALIGN_CENTER
+        )
 
     # Save to memory stream
     output_stream = io.BytesIO()
@@ -45,7 +52,6 @@ if uploaded_file is not None:
 
     st.success("✅ PDF processed successfully!")
     
-    # Download Button for Staff
     st.download_button(
         label="📥 Download Modified PDF",
         data=output_stream.getvalue(),
