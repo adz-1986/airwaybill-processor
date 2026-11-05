@@ -18,26 +18,42 @@ if uploaded_file is not None:
         
     page = doc[0]  # Page 1
     
-    # 2. Define exact coordinate boxes [x0, y0, x1, y1] for the price/charge fields
-    # This works regardless of what text (or blank space) is currently in the box.
-    charge_boxes = [
-        fitz.Rect(275, 235, 335, 265),  # Rate / Charge box
-        fitz.Rect(375, 235, 475, 265),  # Total box
-        fitz.Rect(375, 455, 475, 480),  # Rate Total row
-        fitz.Rect(110, 488, 200, 515),  # Weight Charge box
-        fitz.Rect(110, 785, 200, 810)   # Total Prepaid box
-    ]
+    # 2. Smart zone scanning: find text words located in the exact vertical zones for pricing fields
+    words = page.get_text("words")  # list of (x0, y0, x1, y1, text, ...)
     
-    for box in charge_boxes:
-        # Cover any existing text or background with a clean white block
-        page.add_redact_annot(box, fill=(1, 1, 1))
-        page.apply_redactions()
+    target_rects = []
+    for w in words:
+        x0, y0, x1, y1, text = w[:5]
         
-        # Insert "As Agreed" perfectly centered inside the box
+        # Zone 1: Item Row (Rate & Total columns) -> upper middle table
+        if 225 <= y0 <= 260 and (260 <= x0 <= 480):
+            target_rects.append(fitz.Rect(x0 - 2, y0 - 2, x1 + 2, y1 + 2))
+            
+        # Zone 2: Weight Charge box -> middle section
+        elif 480 <= y0 <= 515 and (100 <= x0 <= 210):
+            target_rects.append(fitz.Rect(x0 - 2, y0 - 2, x1 + 2, y1 + 2))
+            
+        # Zone 3: Total Prepaid box -> bottom section
+        elif 775 <= y0 <= 815 and (100 <= x0 <= 210):
+            target_rects.append(fitz.Rect(x0 - 2, y0 - 2, x1 + 2, y1 + 2))
+
+    # Fallback default boxes if cells happen to be completely blank
+    if not target_rects:
+        target_rects = [
+            fitz.Rect(275, 235, 335, 260),  # Rate
+            fitz.Rect(375, 235, 475, 260),  # Total
+            fitz.Rect(110, 488, 200, 512),  # Weight Charge
+            fitz.Rect(110, 785, 200, 810)   # Total Prepaid
+        ]
+
+    # Redact and replace each identified field cleanly
+    for rect in target_rects:
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+        page.apply_redactions()
         page.insert_textbox(
-            box,
+            rect,
             "As Agreed",
-            fontsize=8,
+            fontsize=7,
             fontname="helv",
             color=(0, 0, 0),
             align=fitz.TEXT_ALIGN_CENTER
