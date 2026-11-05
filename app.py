@@ -5,7 +5,7 @@ import io
 st.set_page_config(page_title="Air Waybill Processor", layout="centered")
 
 st.title("🛩️ Air Waybill PDF Processor")
-st.markdown("Upload your Air Waybill PDF to keep the **first 2 pages** and set pricing to **'As Agreed'**.")
+st.markdown("Upload your Air Waybill PDF to keep the **first 2 pages** and set pricing fields to **'As Agreed'** automatically.")
 
 uploaded_file = st.file_uploader("Choose an Air Waybill PDF", type=["pdf"])
 
@@ -18,26 +18,24 @@ if uploaded_file is not None:
         
     page = doc[0]  # Page 1
     
-    # 2. Define exact bounding boxes [x0, y0, x1, y1] for each field on standard A4 Air Waybill
-    # Adjust these exact box bounds if your scanner / renderer uses a slightly different DPI layout
-    fields = [
-        {"name": "Rate / Charge",   "rect": fitz.Rect(275, 235, 335, 265)},
-        {"name": "Total Charge",    "rect": fitz.Rect(375, 235, 475, 265)},
-        {"name": "Rate Total Row",  "rect": fitz.Rect(375, 455, 475, 480)},
-        {"name": "Weight Charge",   "rect": fitz.Rect(110, 488, 200, 515)},
-        {"name": "Total Prepaid",   "rect": fitz.Rect(110, 785, 200, 810)}
+    # 2. Define exact coordinate boxes [x0, y0, x1, y1] for the price/charge fields
+    # This works regardless of what text (or blank space) is currently in the box.
+    charge_boxes = [
+        fitz.Rect(275, 235, 335, 265),  # Rate / Charge box
+        fitz.Rect(375, 235, 475, 265),  # Total box
+        fitz.Rect(375, 455, 475, 480),  # Rate Total row
+        fitz.Rect(110, 488, 200, 515),  # Weight Charge box
+        fitz.Rect(110, 785, 200, 810)   # Total Prepaid box
     ]
     
-    for field in fields:
-        r = field["rect"]
-        
-        # Redact/blank out existing numbers in the box area
-        page.add_redact_annot(r, fill=(1, 1, 1))
+    for box in charge_boxes:
+        # Cover any existing text or background with a clean white block
+        page.add_redact_annot(box, fill=(1, 1, 1))
         page.apply_redactions()
         
-        # Insert "As Agreed" horizontally and vertically centered inside the box
+        # Insert "As Agreed" perfectly centered inside the box
         page.insert_textbox(
-            r,
+            box,
             "As Agreed",
             fontsize=8,
             fontname="helv",
